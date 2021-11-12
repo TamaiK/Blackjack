@@ -1,4 +1,5 @@
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 import java.util.Scanner;
 
@@ -80,24 +81,27 @@ public class App {
     }
 
     enum Reply {
-        YES("Y"), 
-        NO("N");
+        YES("Y", "y"), 
+        NO("N", "n");
 
-        public final String name;
+        public final String[] names;
 
         public static final String ENUM_RANGE = "Y/N";
 
-        private Reply(String setName) {
-            name = setName;
+        private Reply(String... setNames) {
+            names = setNames;
         }
 
         public static boolean isMatchFromName(String fromName) {
 
             for (Reply reply : Reply.values()) {
 
-                if (reply.name.equals(fromName)) {
+                for (String name : reply.names) {
 
-                    return true;
+                    if (name.equals(fromName)) {
+
+                        return true;
+                    }
                 }
             }
 
@@ -108,9 +112,12 @@ public class App {
 
             for (Reply reply : Reply.values()) {
 
-                if (reply.name.equals(fromName)) {
+                for (String name : reply.names) {
 
-                    return reply;
+                    if (name.equals(fromName)) {
+
+                        return reply;
+                    }
                 }
             }
 
@@ -131,7 +138,10 @@ public class App {
     private static Random random;
     private static Scanner scanner;
 
-    private static ArrayList<ArrayList<Rank>> handCardsList;
+    private static List<List<Rank>> handCardsList;
+
+    private static int coinNum;
+    private static int bettingCoins;
 
     // 定数
 
@@ -140,6 +150,14 @@ public class App {
     private static final int ACE_SMALL_SCORE = 1;
     private static final int MAX_SCORE = 21;
     private static final int DEALER_HIT_CONTINUE_LINE = 17;
+    private static final int FIRST_CARDS = 2;
+
+    private static final int FIRST_COINS = 100;
+    private static final int BET_COINS = 10;
+    private static final int WIN_RATE = 2;
+    private static final int WIN_BLACKJACK_RATE = 3;
+    private static final int LOSE_RATE = 0;
+    private static final int DRAW_RATE = 1;
 
     private static final String MESSAGE_FOR_BLANK = "";
 
@@ -150,12 +168,22 @@ public class App {
     private static final String MESSAGE_FORMAT_FOR_ERROR_FORMAT = "注意：%sで入力してください。";
 
     private static final String MESSAGE_FOR_MAX_SCORE = "21になりました！";
+    private static final String MESSAGE_FOR_BLACKJACK = "ブラックジャック！";
     private static final String MESSAGE_FORMAT_FOR_BUST = "%sはバストしました……";
 
     private static final String MESSAGE_FOR_RESULT = "最終結果";
     private static final String MESSAGE_FOR_RESULT_WIN = "あなたの勝ちです！";
     private static final String MESSAGE_FOR_RESULT_LOSE = "あなたの負けです……";
     private static final String MESSAGE_FOR_RESULT_DRAW = "引き分けです。";
+
+    private static final String MESSAGE_FORMAT_FOR_FIRST_COINS = "最初の手持ちは%dコインです。";
+    private static final String MESSAGE_FORMAT_FOR_BET_COINS = "1プレイ%dコインです。";
+    private static final String MESSAGE_FOR_EXIT_TIMING = "コインが無くなったら終了です。";
+
+    private static final String MESSAGE_FOR_BET = "ベット";
+    private static final String MESSAGE_FORMAT_FOR_CHANGES_COIN = "%+dコイン";
+    private static final String MESSAGE_FORMAT_FOR_NOW_COINS = "現在の手持ちは %dコイン です。";
+    private static final String MESSAGE_FOR_LOST_COINS = "手持ちのコインが無くなりました……";
 
     static {
         init();
@@ -173,9 +201,11 @@ public class App {
         random = new Random();
         scanner = new Scanner(System.in);
 
-        handCardsList = new ArrayList<ArrayList<Rank>>();
-        handCardsList.add(new ArrayList<Rank>());
-        handCardsList.add(new ArrayList<Rank>());
+        handCardsList = new ArrayList<>();
+        handCardsList.add(new ArrayList<>());
+        handCardsList.add(new ArrayList<>());
+
+        coinNum = FIRST_COINS;
     }
 
     private static void fin() {
@@ -186,21 +216,48 @@ public class App {
 
     private static void playBlackjack() {
 
-        startProcess();
+        dispExplanation();
 
-        playerTurn();
+        while (canNextGame()) {
 
-        dealerTurn();
+            startProcess();
 
-        resultProcess();
+            playerTurn();
+
+            dealerTurn();
+
+            resultProcess();
+
+            dispNowCoinNum();
+
+            if (canNextGame()) {
+                replayProcess();
+            }
+        }
+
+        dispLostCoin();
+    }
+
+    private static boolean canNextGame() {
+        return coinNum != 0;
+    }
+
+    private static void dispExplanation() {
+
+        println(MESSAGE_FORMAT_FOR_FIRST_COINS, FIRST_COINS);
+        println(MESSAGE_FORMAT_FOR_BET_COINS, BET_COINS);
+        println(MESSAGE_FOR_EXIT_TIMING);
     }
 
     private static void startProcess() {
 
-        hitCard(Unit.PLAYER);
-        hitCard(Unit.DEALER);
-        hitCard(Unit.PLAYER);
-        hitCard(Unit.DEALER);
+        dipsBlankLine();
+
+        bet();
+
+        for (int deal = 0; deal < FIRST_CARDS; deal++) {
+            hitCardAllUnit();
+        }
 
         dipsBlankLine();
     }
@@ -215,7 +272,8 @@ public class App {
         while (needHit(reply)) {
 
             if (isMaxScore(score)) {
-                dispMaxScore(score);
+                int cardsNum = getCountCard(Unit.PLAYER);
+                dispMaxScore(score, cardsNum);
                 break;
             }
 
@@ -277,6 +335,51 @@ public class App {
 
         GameResult result = getGameResult(Unit.PLAYER, Unit.DEALER);
         dispGameResult(result);
+
+        int rtrnCoins = getReturnCoins(result);
+        changesCoin(rtrnCoins);
+        dispChangesCoin(rtrnCoins);
+        dipsBlankLine();
+    }
+
+    private static void dispNowCoinNum() {
+        println(MESSAGE_FORMAT_FOR_NOW_COINS, coinNum);
+    }
+
+    private static void replayProcess() {
+
+        for (List<Rank> handCards : handCardsList) {
+            handCards.clear();
+        }
+    }
+
+    private static void dispLostCoin() {
+        println(MESSAGE_FOR_LOST_COINS);
+    }
+
+    private static void bet() {
+
+        bettingCoins = getBetCoin();
+        changesCoin(-bettingCoins);
+
+        dispBet();
+        dispChangesCoin(-bettingCoins);
+        dipsBlankLine();
+    }
+
+    private static int getBetCoin() {
+        return coinNum < BET_COINS ? coinNum : BET_COINS;
+    }
+
+    private static void dispBet() {
+        println(MESSAGE_FOR_BET);
+    }
+
+    private static void hitCardAllUnit() {
+
+        for (Unit unit : Unit.values()) {
+            hitCard(unit);
+        }
     }
 
     private static Reply inputPlayerReply() {
@@ -316,7 +419,13 @@ public class App {
         return reply != Reply.NO;
     }
 
-    private static void dispMaxScore(int score) {
+    private static void dispMaxScore(int score, int cardsNum) {
+
+        if (isFirstHands(cardsNum)){
+            println(MESSAGE_FOR_BLACKJACK);
+            return;
+        }
+
         println(MESSAGE_FOR_MAX_SCORE);
     }
 
@@ -336,13 +445,28 @@ public class App {
 
         int myScore = getScore(myUnit);
         int opponentScore = getScore(opponentUnit);
+        int myHandCardNum = getCountCard(myUnit);
+        int opponentHandCardNum = getCountCard(opponentUnit);
 
         if (isBust(myScore)) {
             return GameResult.LOSE;
         }
 
+        if (isBlackjack(myScore, myHandCardNum)) {
+
+            if (isBlackjack(opponentScore, opponentHandCardNum)) {
+                return GameResult.DRAW;
+            }
+
+            return GameResult.WIN_BLACKJACK;
+        }
+
         if (isBust(opponentScore)) {
             return GameResult.WIN;
+        }
+
+        if (isBlackjack(opponentScore, opponentHandCardNum)) {
+            return GameResult.LOSE;
         }
 
         if (myScore == opponentScore) {
@@ -361,6 +485,7 @@ public class App {
         switch (result) {
 
         case WIN:
+        case WIN_BLACKJACK:
             dispPlayerWin();
             break;
 
@@ -387,19 +512,45 @@ public class App {
         println(MESSAGE_FOR_RESULT_DRAW);
     }
 
+    private static int getReturnCoins(GameResult result){
+
+        int rate;
+        switch (result) {
+
+        case WIN:
+            rate = WIN_RATE;
+            break;
+
+        case WIN_BLACKJACK:
+            rate = WIN_BLACKJACK_RATE;
+            break;
+
+        case LOSE:
+            rate = LOSE_RATE;
+            break;
+
+        default:
+        case DRAW:
+            rate = DRAW_RATE;
+            break;
+        }
+
+        return bettingCoins * rate;
+    }
+
     // 複数個所で使う関数
 
     private static void hitCard(Unit unit) {
 
-        ArrayList<Rank> handCards = getHandCards(unit);
+        List<Rank> handCards = getHandCards(unit);
         hitCard(unit, handCards);
     }
 
-    private static ArrayList<Rank> getHandCards(Unit unit) {
+    private static List<Rank> getHandCards(Unit unit) {
         return handCardsList.get(unit.number);
     }
 
-    private static void hitCard(Unit unit, ArrayList<Rank> cardList) {
+    private static void hitCard(Unit unit, List<Rank> cardList) {
 
         Rank card = createRandomRank();
         dispHitCard(unit, card);
@@ -412,11 +563,11 @@ public class App {
 
     private static void dispScore(Unit unit) {
 
-        ArrayList<Rank> handCards = getHandCards(unit);
+        List<Rank> handCards = getHandCards(unit);
         dispScore(unit, handCards);
     }
 
-    private static void dispScore(Unit unit, ArrayList<Rank> cardList) {
+    private static void dispScore(Unit unit, List<Rank> cardList) {
 
         int score = getScore(cardList);
         String dispCards = getCardListString(cardList);
@@ -424,29 +575,18 @@ public class App {
         println(MESSAGE_FORMAT_FOR_SCORE, unit.name, score, dispCards);
     }
 
-    private static int getScore(ArrayList<Rank> cardList) {
+    private static int getScore(List<Rank> cardList) {
 
         int score = 0;
         int aceCount = 0;
 
         for (Rank rank : cardList) {
 
-            switch (rank) {
+            int cardScore = getCardScore(rank);
+            score += cardScore;
 
-            case ACE:
-                score += ACE_SMALL_SCORE;
+            if (rank == Rank.ACE) {
                 aceCount++;
-                break;
-
-            case JACK:
-            case QUEEN:
-            case KING:
-                score += COURT_CARDS_SCORE;
-                break;
-
-            default:
-                score += rank.number;
-                break;
             }
         }
 
@@ -464,11 +604,36 @@ public class App {
         return score;
     }
 
+    private static int getCardScore(Rank rank) {
+
+        switch (rank) {
+
+        case ACE:
+            return ACE_SMALL_SCORE;
+
+        case JACK:
+        case QUEEN:
+        case KING:
+            return COURT_CARDS_SCORE;
+
+        default:
+            return rank.number;
+        }
+    }
+
     private static int getScore(Unit unit) {
         return getScore(getHandCards(unit));
     }
 
-    private static String getCardListString(ArrayList<Rank> cardList) {
+    private static void changesCoin(int changesNum) {
+        coinNum += changesNum;
+    }
+
+    private static int getCountCard(Unit unit) {
+        return getHandCards(unit).size();
+    }
+
+    private static String getCardListString(List<Rank> cardList) {
 
         String str = "";
         int index = 0;
@@ -493,9 +658,21 @@ public class App {
         return score == MAX_SCORE;
     }
 
+    private static boolean isFirstHands(int cardsNum){
+        return cardsNum == FIRST_CARDS;
+    }
+
+    private static boolean isBlackjack(int score, int handCardNum) {
+        return isMaxScore(score) && isFirstHands(handCardNum);
+    }
+
     private static Rank createRandomRank() {
         int number = createRandomNumber(Rank.first().number, Rank.last().number);
         return Rank.getRankFromNumber(number);
+    }
+
+    private static void dispChangesCoin(int ChangeNum) {
+        println(MESSAGE_FORMAT_FOR_CHANGES_COIN, ChangeNum);
     }
 
     private static void dipsBlankLine() {
@@ -503,10 +680,6 @@ public class App {
     }
 
     // 汎用関数
-
-    private static void print(String str) {
-        System.out.print(str);
-    }
 
     private static void print(String str, Object... args) {
         System.out.print(String.format(str, args));
